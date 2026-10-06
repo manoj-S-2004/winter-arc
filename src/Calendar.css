@@ -1,0 +1,409 @@
+
+/* =========================================
+   WINTER ARC 90-DAY CALENDAR
+   ========================================= */
+
+.arc-live-note {
+  margin: -8px 0 20px;
+  color: #8f8f8f;
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.arc-calendar-card {
+  margin-top: 22px;
+  padding: 26px;
+  border: 1px solid #242424;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #111111, #0c0c0c);
+}
+
+.arc-calendar-subtitle {
+  margin-top: 7px;
+  color: #777;
+  font-size: 14px;
+}
+
+.arc-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin: 22px 0 20px;
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.arc-calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+  border-radius: 50%;
+  border: 1px solid #444;
+}
+
+.legend-dot.completed {
+  background: #fff;
+  border-color: #fff;
+}
+
+.legend-dot.missed {
+  background: #3b3b3b;
+}
+
+.legend-dot.today {
+  background: #fff;
+  box-shadow: 0 0 0 3px #444;
+}
+
+.legend-dot.future {
+  background: transparent;
+  border-color: #555;
+}
+
+.arc-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.arc-calendar-day {
+  min-height: 68px;
+  padding: 10px 7px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid #252525;
+  border-radius: 13px;
+  background: #101010;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.arc-calendar-day:hover {
+  transform: translateY(-2px);
+  border-color: #555;
+}
+
+.arc-calendar-day.completed {
+  background: #f4f4f4;
+  color: #090909;
+  border-color: #f4f4f4;
+}
+
+.arc-calendar-day.missed {
+  background: #191919;
+  color: #777;
+  border-color: #292929;
+}
+
+.arc-calendar-day.today {
+  border: 2px solid #ffffff;
+  background: #161616;
+  color: #fff;
+  box-shadow: 0 0 0 3px #2a2a2a;
+}
+
+.arc-calendar-day.future {
+  color: #555;
+  background: #0d0d0d;
+}
+
+.calendar-day-number {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.calendar-day-status {
+  min-height: 14px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.calendar-day-percent {
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.65;
+}
+
+@media (max-width: 800px) {
+  .arc-calendar-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .arc-calendar-card {
+    padding: 18px;
+    border-radius: 17px;
+  }
+
+  .arc-calendar-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .arc-calendar-day {
+    min-height: 58px;
+    border-radius: 10px;
+  }
+
+  .arc-calendar-legend {
+    gap: 10px 14px;
+  }
+}
+
+/* =========================================
+   WINTER ARC 90-DAY CALENDAR
+   ========================================= */
+
+.arc-live-note {
+  margin: -8px 0 20px;
+  color: #8f8f8f;
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.arc-calendar-card {
+  margin-top: 22px;
+  padding: 26px;
+  border: 1px solid #242424;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #111111, #0c0c0c);
+}
+
+.arc-calendar-subtitle {
+  margin-top: 7px;
+  color: #777;
+  font-size: 14px;
+}
+
+.arc-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin: 22px 0 20px;
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.arc-calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+  border-radius: 50%;
+  border: 1px solid #444;
+}
+
+.legend-dot.completed {
+  background: #fff;
+  border-color: #fff;
+}
+
+.legend-dot.missed {
+  background: #3b3b3b;
+}
+
+.legend-dot.today {
+  background: #fff;
+  box-shadow: 0 0 0 3px #444;
+}
+
+.legend-dot.future {
+  background: transparent;
+  border-color: #555;
+}
+
+.arc-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.arc-calendar-day {
+  min-height: 68px;
+  padding: 10px 7px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid #252525;
+  border-radius: 13px;
+  background: #101010;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.arc-calendar-day:hover {
+  transform: translateY(-2px);
+  border-color: #555;
+}
+
+.arc-calendar-day.completed {
+  background: #f4f4f4;
+  color: #090909;
+  border-color: #f4f4f4;
+}
+
+.arc-calendar-day.missed {
+  background: #191919;
+  color: #777;
+  border-color: #292929;
+}
+
+.arc-calendar-day.today {
+  border: 2px solid #ffffff;
+  background: #161616;
+  color: #fff;
+  box-shadow: 0 0 0 3px #2a2a2a;
+}
+
+.arc-calendar-day.future {
+  color: #555;
+  background: #0d0d0d;
+}
+
+.calendar-day-number {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.calendar-day-status {
+  min-height: 14px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.calendar-day-percent {
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.65;
+}
+
+@media (max-width: 800px) {
+  .arc-calendar-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .arc-calendar-card {
+    padding: 18px;
+    border-radius: 17px;
+  }
+
+  .arc-calendar-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .arc-calendar-day {
+    min-height: 58px;
+    border-radius: 10px;
+  }
+
+  .arc-calendar-legend {
+    gap: 10px 14px;
+  }
+}
+
+
+/* =========================================
+   STREAK & ARC STATS
+   ========================================= */
+
+.arc-stats-card {
+  margin-top: 22px;
+  padding: 26px;
+  border: 1px solid #242424;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #111111, #0c0c0c);
+}
+
+.arc-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.arc-stat-box {
+  min-height: 125px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid #252525;
+  border-radius: 16px;
+  background: #101010;
+}
+
+.arc-stat-box.highlight {
+  border-color: #5b5b5b;
+  background: #161616;
+}
+
+.arc-stat-box span {
+  color: #777;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+}
+
+.arc-stat-box strong {
+  margin-top: 9px;
+  font-size: 32px;
+  line-height: 1;
+  color: #fff;
+}
+
+.arc-stat-box small {
+  margin-top: 7px;
+  color: #666;
+  font-size: 11px;
+}
+
+@media (max-width: 800px) {
+  .arc-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .arc-stats-card {
+    padding: 18px;
+    border-radius: 17px;
+  }
+
+  .arc-stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .arc-stat-box {
+    min-height: 105px;
+    padding: 14px;
+  }
+
+  .arc-stat-box strong {
+    font-size: 26px;
+  }
+}
