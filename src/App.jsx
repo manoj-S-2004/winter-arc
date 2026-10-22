@@ -1,824 +1,737 @@
 import { useState, useEffect, useCallback } from "react";
 
 import "./App.css";
+
 import "./Calendar.css";
 
 import Setup from "./Setup";
 
+import { supabase } from "./supabase";
 
+import Auth from "./Auth.jsx";
 
 import {
 
-  calculateArcDay,
+  calculateArcDay,
 
-  getLocalDateString,
+  getLocalDateString,
 
-  parseLocalDate,
+  parseLocalDate,
 
-  getNextMidnight,
+  getNextMidnight,
 
-  resetGoalsForNewDay,
+  resetGoalsForNewDay,
 
-  createDayRecord,
+  createDayRecord,
 
-  createMissedDayRecord,
+  createMissedDayRecord,
 
-  calculateArcStatus,
+  calculateArcStatus,
 
-  getMissedDays,
+  getMissedDays,
 
-  TOTAL_DAYS,
+  TOTAL_DAYS,
 
 } from "./dayEngine";
 
-
-
 function readJson(key, fallback) {
 
-  try {
+  try {
 
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(key);
 
-    if (raw == null) {
+    if (raw == null) {
 
-      return fallback;
+      return fallback;
 
-    }
+    }
 
-    return JSON.parse(raw);
+    return JSON.parse(raw);
 
-  } catch {
+  } catch {
 
-    return fallback;
+    return fallback;
 
-  }
+  }
 
 }
 
-
-
 function App() {
 
-  const TEST_MODE = false;
+  const TEST_MODE = false;
+  async function handleLogout() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Logout failed:", error.message);
+      alert("Could not log out. Please try again.");
+    }
+  }
 
+  const [session, setSession] = useState(null);
 
+const [authLoading, setAuthLoading] = useState(true);
 
-  // ==================================
+useEffect(() => {
 
-  // SETUP
+  supabase.auth.getSession().then(({ data, error }) => {
 
-  // ==================================
+    if (error) {
 
+      console.error("Session check failed:", error.message);
 
+    }
 
-  const [isSetupComplete, setIsSetupComplete] = useState(() => {
+    setSession(data?.session ?? null);
 
-    return (
+    setAuthLoading(false);
 
-      localStorage.getItem("winterArcSetupComplete") === "true"
+  });
 
-    );
+  const {
 
-  });
+    data: { subscription },
 
+  } = supabase.auth.onAuthStateChange((_event, session) => {
 
+    setSession(session);
 
-  const [userData, setUserData] = useState(() => {
+    setAuthLoading(false);
 
-    return readJson("winterArcUserData", {
+  });
 
-      startingWeight: "--",
+  return () => {
 
-      targetWeight: "--",
+    subscription.unsubscribe();
 
-      startDate: "2026-10-01",
+  };
 
-      photo: null,
+}, []);
 
-    });
+  // ==================================
 
-  });
+  // SETUP
 
+  // ==================================
 
+  const [isSetupComplete, setIsSetupComplete] = useState(() => {
 
-  // ==================================
+    return (
 
-  // CORE GOALS
+      localStorage.getItem("winterArcSetupComplete") === "true"
 
-  // ==================================
+    );
 
+  });
 
+  const [userData, setUserData] = useState(() => {
 
-  const defaultCoreGoals = [
+    return readJson("winterArcUserData", {
 
-    {
+      startingWeight: "--",
 
-      name: "Workout",
+      targetWeight: "--",
 
-      icon: "🏋️",
+      startDate: "2026-10-01",
 
-      completed: false,
+      photo: null,
 
-    },
+    });
 
-    {
+  });
 
-      name: "Walking",
+  // ==================================
 
-      icon: "🚶",
+  // CORE GOALS
 
-      completed: false,
+  // ==================================
 
-    },
+  const defaultCoreGoals = [
 
-    {
+    {
 
-      name: "No Junk Food",
+      name: "Workout",
 
-      icon: "🍔",
+      icon: "🏋️",
 
-      completed: false,
+      completed: false,
 
-    },
+    },
 
-    {
+    {
 
-      name: "No Sugar",
+      name: "Walking",
 
-      icon: "🍬",
+      icon: "🚶",
 
-      completed: false,
+      completed: false,
 
-    },
+    },
 
-  ];
+    {
 
+      name: "No Junk Food",
 
+      icon: "🍔",
 
-  const [goals, setGoals] = useState(() => {
+      completed: false,
 
-    return readJson("winterArcGoals", defaultCoreGoals);
+    },
 
-  });
+    {
 
+      name: "No Sugar",
 
+      icon: "🍬",
 
-  // ==================================
+      completed: false,
 
-  // OPTIONAL GOALS
+    },
 
-  // ==================================
+  ];
 
+  const [goals, setGoals] = useState(() => {
 
+    return readJson("winterArcGoals", defaultCoreGoals);
 
-  const [optionalGoals, setOptionalGoals] = useState(() => {
+  });
 
-    return readJson("winterArcOptionalGoals", []);
+  // ==================================
 
-  });
+  // OPTIONAL GOALS
 
+  // ==================================
 
+  const [optionalGoals, setOptionalGoals] = useState(() => {
 
-  // ==================================
+    return readJson("winterArcOptionalGoals", []);
 
-  // DAY SYSTEM
+  });
 
-  // ==================================
+  // ==================================
 
+  // DAY SYSTEM
 
+  // ==================================
 
-  const [currentDay, setCurrentDay] = useState(() => {
+  const [currentDay, setCurrentDay] = useState(() => {
 
-    const data = readJson("winterArcUserData", null);
+    const data = readJson("winterArcUserData", null);
 
+    if (!data?.startDate) return 1;
 
+    return calculateArcDay(data.startDate);
 
-    if (!data?.startDate) return 1;
+  });
 
+  const [testDay, setTestDay] = useState(null);
 
+  const activeDay =
 
-    return calculateArcDay(data.startDate);
+    TEST_MODE && testDay !== null
 
-  });
+      ? testDay
 
+      : currentDay;
 
+  // ==================================
 
-  const [testDay, setTestDay] = useState(null);
+  // DAY RECORDS
 
+  // ==================================
 
+  const [dayRecords, setDayRecords] = useState(() => {
 
-  const activeDay =
+    return readJson("winterArcDayRecords", {});
 
-    TEST_MODE && testDay !== null
+  });
 
-      ? testDay
+  // ==================================
 
-      : currentDay;
+  // ARC STATUS
 
+  // ==================================
 
+  const [arcStatus, setArcStatus] = useState(() => {
 
-  // ==================================
+    const savedStatus =
 
-  // DAY RECORDS
+      localStorage.getItem("winterArcStatus");
 
-  // ==================================
+    return savedStatus || "active";
 
+  });
 
+  // ==================================
 
-  const [dayRecords, setDayRecords] = useState(() => {
+  // HISTORY
 
-    return readJson("winterArcDayRecords", {});
+  // ==================================
 
-  });
-
-
-
-  // ==================================
-
-  // ARC STATUS
-
-  // ==================================
-
-
-
-  const [arcStatus, setArcStatus] = useState(() => {
-
-    const savedStatus =
-
-      localStorage.getItem("winterArcStatus");
-
-
-
-    return savedStatus || "active";
-
-  });
-
-
-
-  // ==================================
-
-  // HISTORY
-
-  // ==================================
-
-
-
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
 const [weightEntries, setWeightEntries] = useState(() => {
 
-  return readJson("winterArcWeightEntries", {});
+  return readJson("winterArcWeightEntries", {});
 
 });
 
-
-
 const [todayWeight, setTodayWeight] = useState("");
 
-  // ==================================
+  // ==================================
 
-  // ADD GOAL
+  // ADD GOAL
 
-  // ==================================
+  // ==================================
 
+  const [showAddGoal, setShowAddGoal] = useState(false);
 
+  const [newGoalName, setNewGoalName] = useState("");
 
-  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [newGoalIcon, setNewGoalIcon] = useState("🎯");
 
-  const [newGoalName, setNewGoalName] = useState("");
+  // ==================================
 
-  const [newGoalIcon, setNewGoalIcon] = useState("🎯");
+  // PERSIST GOALS
 
+  // ==================================
 
+  useEffect(() => {
 
-  // ==================================
+    localStorage.setItem(
 
-  // PERSIST GOALS
+      "winterArcGoals",
 
-  // ==================================
+      JSON.stringify(goals)
 
+    );
 
+  }, [goals]);
 
-  useEffect(() => {
+  useEffect(() => {
 
-    localStorage.setItem(
+    localStorage.setItem(
 
-      "winterArcGoals",
+      "winterArcOptionalGoals",
 
-      JSON.stringify(goals)
+      JSON.stringify(optionalGoals)
 
-    );
+    );
 
-  }, [goals]);
+  }, [optionalGoals]);
 
+  useEffect(() => {
 
+  localStorage.setItem(
 
-  useEffect(() => {
+    "winterArcWeightEntries",
 
-    localStorage.setItem(
+    JSON.stringify(weightEntries)
 
-      "winterArcOptionalGoals",
-
-      JSON.stringify(optionalGoals)
-
-    );
-
-  }, [optionalGoals]);
-
-  useEffect(() => {
-
-  localStorage.setItem(
-
-    "winterArcWeightEntries",
-
-    JSON.stringify(weightEntries)
-
-  );
+  );
 
 }, [weightEntries]);
 
-  // ==================================
+  // ==================================
 
-  // PERSIST DAY RECORDS
+  // PERSIST DAY RECORDS
 
-  // ==================================
+  // ==================================
 
+  useEffect(() => {
 
+    localStorage.setItem(
 
-  useEffect(() => {
+      "winterArcDayRecords",
 
-    localStorage.setItem(
+      JSON.stringify(dayRecords)
 
-      "winterArcDayRecords",
+    );
 
-      JSON.stringify(dayRecords)
+  }, [dayRecords]);
 
-    );
+  // ==================================
 
-  }, [dayRecords]);
+  // PERSIST ARC STATUS
 
+  // ==================================
 
+  useEffect(() => {
 
-  // ==================================
+    localStorage.setItem(
 
-  // PERSIST ARC STATUS
+      "winterArcStatus",
 
-  // ==================================
+      arcStatus
 
+    );
 
+  }, [arcStatus]);
 
-  useEffect(() => {
+  // ==================================
 
-    localStorage.setItem(
+  // START WINTER ARC
 
-      "winterArcStatus",
+  // ==================================
 
-      arcStatus
+  const handleStart = (data) => {
 
-    );
+    setUserData(data);
 
-  }, [arcStatus]);
+    setIsSetupComplete(true);
 
+    localStorage.setItem(
 
+      "winterArcSetupComplete",
 
-  // ==================================
+      "true"
 
-  // START WINTER ARC
+    );
 
-  // ==================================
+    localStorage.setItem(
 
+      "winterArcUserData",
 
+      JSON.stringify(data)
 
-  const handleStart = (data) => {
+    );
 
-    setUserData(data);
+    localStorage.removeItem(
 
-    setIsSetupComplete(true);
+      "winterArcDayRecords"
 
+    );
 
+    localStorage.removeItem(
 
-    localStorage.setItem(
+      "winterArcStatus"
 
-      "winterArcSetupComplete",
+    );
 
-      "true"
+    localStorage.removeItem(
 
-    );
+      "winterArcLastOpenDay"
 
+    );
 
+    localStorage.removeItem(
 
-    localStorage.setItem(
+      "winterArcWeightEntries"
 
-      "winterArcUserData",
+    );
 
-      JSON.stringify(data)
+    setDayRecords({});
 
-    );
+    setWeightEntries({});
 
+    setTodayWeight("");
 
+    setArcStatus("active");
 
-    localStorage.removeItem(
+    setGoals(
 
-      "winterArcDayRecords"
+      defaultCoreGoals.map((goal) => ({
 
-    );
+        ...goal,
 
+        completed: false,
 
+      }))
 
-    localStorage.removeItem(
+    );
 
-      "winterArcStatus"
+    setOptionalGoals((currentGoals) =>
 
-    );
+      currentGoals.map((goal) => ({
 
+        ...goal,
 
+        completed: false,
 
-    localStorage.removeItem(
+      }))
 
-      "winterArcLastOpenDay"
+    );
 
-    );
+    const startingDay =
 
+      calculateArcDay(data.startDate);
 
+    setCurrentDay(startingDay);
 
-    localStorage.removeItem(
+    setTestDay(null);
 
-      "winterArcWeightEntries"
+  };
 
-    );
+  // ==================================
 
+  // CURRENT DAY STATUS
 
+  // ==================================
 
-    setDayRecords({});
+  const isDaySubmitted =
 
-    setWeightEntries({});
+    dayRecords[activeDay]?.status === "submitted";
 
-    setTodayWeight("");
+  // ==================================
 
-    setArcStatus("active");
+  // TOGGLE CORE GOAL
 
+  // ==================================
 
+  const toggleGoal = (index) => {
 
-    setGoals(
+    if (isDaySubmitted) return;
 
-      defaultCoreGoals.map((goal) => ({
+    setGoals((currentGoals) =>
 
-        ...goal,
+      currentGoals.map((goal, i) =>
 
-        completed: false,
+        i === index
 
-      }))
+          ? {
 
-    );
+              ...goal,
 
+              completed: !goal.completed,
 
+            }
 
-    setOptionalGoals((currentGoals) =>
+          : goal
 
-      currentGoals.map((goal) => ({
+      )
 
-        ...goal,
+    );
 
-        completed: false,
+  };
 
-      }))
+  // ==================================
 
-    );
+  // TOGGLE OPTIONAL GOAL
 
+  // ==================================
 
+  const toggleOptionalGoal = (id) => {
 
-    const startingDay =
+    if (isDaySubmitted) return;
 
-      calculateArcDay(data.startDate);
+    setOptionalGoals((currentGoals) =>
 
+      currentGoals.map((goal) =>
 
+        goal.id === id
 
-    setCurrentDay(startingDay);
+          ? {
 
-    setTestDay(null);
+              ...goal,
 
-  };
+              completed: !goal.completed,
 
+            }
 
+          : goal
 
-  // ==================================
+      )
 
-  // CURRENT DAY STATUS
+    );
 
-  // ==================================
+  };
 
+  // ==================================
 
+  // ADD OPTIONAL GOAL
 
-  const isDaySubmitted =
+  // ==================================
 
-    dayRecords[activeDay]?.status === "submitted";
+  const handleAddGoal = () => {
 
+    if (!newGoalName.trim()) {
 
+      alert("Please enter a goal name.");
 
-  // ==================================
+      return;
 
-  // TOGGLE CORE GOAL
+    }
 
-  // ==================================
+    const newGoal = {
 
+      id: Date.now(),
 
+      name: newGoalName.trim(),
 
-  const toggleGoal = (index) => {
+      icon: newGoalIcon,
 
-    if (isDaySubmitted) return;
+      completed: false,
 
+    };
 
+    setOptionalGoals((currentGoals) => [
 
-    setGoals((currentGoals) =>
+      ...currentGoals,
 
-      currentGoals.map((goal, i) =>
+      newGoal,
 
-        i === index
+    ]);
 
-          ? {
+    setNewGoalName("");
 
-              ...goal,
+    setNewGoalIcon("🎯");
 
-              completed: !goal.completed,
+    setShowAddGoal(false);
 
-            }
+  };
 
-          : goal
+  // ==================================
 
-      )
+  // DELETE OPTIONAL GOAL
 
-    );
+  // ==================================
 
-  };
+  const deleteOptionalGoal = (id) => {
 
+    if (isDaySubmitted) return;
 
+    setOptionalGoals((currentGoals) =>
 
-  // ==================================
+      currentGoals.filter(
 
-  // TOGGLE OPTIONAL GOAL
+        (goal) => goal.id !== id
 
-  // ==================================
+      )
 
+    );
 
+  };
 
-  const toggleOptionalGoal = (id) => {
+  // ==================================
 
-    if (isDaySubmitted) return;
+  // TODAY'S COMPLETION
 
+  // ==================================
 
+  const completedGoals = goals.filter(
 
-    setOptionalGoals((currentGoals) =>
+    (goal) => goal.completed
 
-      currentGoals.map((goal) =>
+  ).length;
 
-        goal.id === id
+  const completion =
 
-          ? {
+    goals.length > 0
 
-              ...goal,
+      ? Math.round(
 
-              completed: !goal.completed,
+          (completedGoals / goals.length) * 100
 
-            }
+        )
 
-          : goal
+      : 0;
 
-      )
+  const disciplineScore = completion;
 
-    );
+  // ==================================
 
-  };
+  // 90-DAY ARC PROGRESS
 
+  // ==================================
 
+  const trackedDayRecords =
 
-  // ==================================
+    Object.values(dayRecords);
 
-  // ADD OPTIONAL GOAL
+  const trackedDays =
 
-  // ==================================
+    trackedDayRecords.length;
 
+  const totalDailyCompletion =
 
+    trackedDayRecords.reduce(
 
-  const handleAddGoal = () => {
+      (total, record) =>
 
-    if (!newGoalName.trim()) {
+        total +
 
-      alert("Please enter a goal name.");
+        (Number(record.completion) || 0),
 
-      return;
+      0
 
-    }
+    );
 
+  const arcProgress =
 
+    trackedDays > 0
 
-    const newGoal = {
+      ? Math.round(
 
-      id: Date.now(),
+          totalDailyCompletion /
 
-      name: newGoalName.trim(),
+            trackedDays
 
-      icon: newGoalIcon,
+        )
 
-      completed: false,
+      : 0;
 
-    };
+  // ==================================
 
+  // HISTORY DAYS
 
+  // ==================================
 
-    setOptionalGoals((currentGoals) => [
+  const historyDays = Array.from(
 
-      ...currentGoals,
+    { length: TOTAL_DAYS },
 
-      newGoal,
+    (_, index) => index + 1
 
-    ]);
-
-
-
-    setNewGoalName("");
-
-    setNewGoalIcon("🎯");
-
-    setShowAddGoal(false);
-
-  };
-
-
-
-  // ==================================
-
-  // DELETE OPTIONAL GOAL
-
-  // ==================================
-
-
-
-  const deleteOptionalGoal = (id) => {
-
-    if (isDaySubmitted) return;
-
-
-
-    setOptionalGoals((currentGoals) =>
-
-      currentGoals.filter(
-
-        (goal) => goal.id !== id
-
-      )
-
-    );
-
-  };
-
-
-
-  // ==================================
-
-  // TODAY'S COMPLETION
-
-  // ==================================
-
-
-
-  const completedGoals = goals.filter(
-
-    (goal) => goal.completed
-
-  ).length;
-
-
-
-  const completion =
-
-    goals.length > 0
-
-      ? Math.round(
-
-          (completedGoals / goals.length) * 100
-
-        )
-
-      : 0;
-
-
-
-  const disciplineScore = completion;
-
-
-
-  // ==================================
-
-  // 90-DAY ARC PROGRESS
-
-  // ==================================
-
-
-
-  const trackedDayRecords =
-
-    Object.values(dayRecords);
-
-
-
-  const trackedDays =
-
-    trackedDayRecords.length;
-
-
-
-  const totalDailyCompletion =
-
-    trackedDayRecords.reduce(
-
-      (total, record) =>
-
-        total +
-
-        (Number(record.completion) || 0),
-
-      0
-
-    );
-
-
-
-  const arcProgress =
-
-    trackedDays > 0
-
-      ? Math.round(
-
-          totalDailyCompletion /
-
-            trackedDays
-
-        )
-
-      : 0;
-
-
-
-  // ==================================
-
-  // HISTORY DAYS
-
-  // ==================================
-
-
-
-  const historyDays = Array.from(
-
-    { length: TOTAL_DAYS },
-
-    (_, index) => index + 1
-
-  );
-
-
+  );
 
 const weightDays = Object.keys(weightEntries)
-    .map(Number)
-    .filter((day) => Number.isFinite(day))
-    .sort((a, b) => a - b);
 
-  const totalWeightEntries = weightDays.length;
+    .map(Number)
 
-  const firstWeight =
-    totalWeightEntries > 0
-      ? Number(weightEntries[weightDays[0]])
-      : 0;
+    .filter((day) => Number.isFinite(day))
 
-  const latestWeightEntry =
-    totalWeightEntries > 0
-      ? Number(
-          weightEntries[weightDays[weightDays.length - 1]]
-        )
-      : 0;
+    .sort((a, b) => a - b);
 
+  const totalWeightEntries = weightDays.length;
 
+  const firstWeight =
+
+    totalWeightEntries > 0
+
+      ? Number(weightEntries[weightDays[0]])
+
+      : 0;
+
+  const latestWeightEntry =
+
+    totalWeightEntries > 0
+
+      ? Number(
+
+          weightEntries[weightDays[weightDays.length - 1]]
+
+        )
+
+      : 0;
 
 const weightLost =
 
-  firstWeight > 0 &&
+  firstWeight > 0 &&
 
-  latestWeightEntry > 0
+  latestWeightEntry > 0
 
-    ? Number(
+    ? Number(
 
-        (
+        (
 
-          firstWeight -
+          firstWeight -
 
-          latestWeightEntry
+          latestWeightEntry
 
-        ).toFixed(1)
+        ).toFixed(1)
 
-      )
+      )
 
-    : 0;
-
-
+    : 0;
 
 // ==================================
 
@@ -826,930 +739,771 @@ const weightLost =
 
 // ==================================
 
-
-
 let longestStreak = 0;
 
 let runningStreak = 0;
 
-
-
 for (let day = 1; day <= TOTAL_DAYS; day++) {
 
-  const record = dayRecords[day];
+  const record = dayRecords[day];
 
+  if (record?.status === "submitted") {
 
+    runningStreak += 1;
 
-  if (record?.status === "submitted") {
+    if (runningStreak > longestStreak) {
 
-    runningStreak += 1;
+      longestStreak = runningStreak;
 
+    }
 
+  } else {
 
-    if (runningStreak > longestStreak) {
+    runningStreak = 0;
 
-      longestStreak = runningStreak;
-
-    }
-
-  } else {
-
-    runningStreak = 0;
-
-  }
+  }
 
 }
-
-
 
 let currentStreak = 0;
 
-
-
 const streakEndDay =
 
-  dayRecords[activeDay]?.status === "submitted"
+  dayRecords[activeDay]?.status === "submitted"
 
-    ? activeDay
+    ? activeDay
 
-    : activeDay - 1;
-
-
+    : activeDay - 1;
 
 for (let day = streakEndDay; day >= 1; day--) {
 
-  const record = dayRecords[day];
+  const record = dayRecords[day];
 
+  if (record?.status === "submitted") {
 
+    currentStreak += 1;
 
-  if (record?.status === "submitted") {
+  } else {
 
-    currentStreak += 1;
+    break;
 
-  } else {
-
-    break;
-
-  }
+  }
 
 }
 
-  // ==================================
+  // ==================================
 
-  // SUBMIT DAY
+  // SUBMIT DAY
 
-  // ==================================
+  // ==================================
 
+  const handleSubmitDay = () => {
 
+    if (isDaySubmitted) return;
 
-  const handleSubmitDay = () => {
+    if (
 
-    if (isDaySubmitted) return;
+      activeDay < 1 ||
 
+      activeDay > TOTAL_DAYS ||
 
+      arcStatus === "completed"
 
-    
-    if (
-      activeDay < 1 ||
-      activeDay > TOTAL_DAYS ||
-      arcStatus === "completed"
-    ) {
-      return;
-    }
+    ) {
+
+      return;
+
+    }
 
 const record = createDayRecord({
 
-      day: activeDay,
+      day: activeDay,
 
-      status: "submitted",
+      status: "submitted",
 
-      goals: goals,
+      goals: goals,
 
-      optionalGoals: optionalGoals,
+      optionalGoals: optionalGoals,
 
-      submittedAt:
+      submittedAt:
 
-        new Date().toISOString(),
+        new Date().toISOString(),
 
-    });
+    });
 
+    setDayRecords((currentRecords) => ({
 
+      ...currentRecords,
 
-    setDayRecords((currentRecords) => ({
+      [activeDay]: record,
 
-      ...currentRecords,
+    }));
 
-      [activeDay]: record,
+  };
 
-    }));
+  // ==================================
 
+  // DAY ROLLOVER
 
+  // ==================================
 
-    
+  const processDayRollover =
 
-  };
+    useCallback(() => {
 
+      if (!userData.startDate) return;
 
+      if (
 
-  // ==================================
+        TEST_MODE &&
 
-  // DAY ROLLOVER
+        testDay !== null
 
-  // ==================================
+      ) {
 
+        return;
 
+      }
 
-  const processDayRollover =
+      const calculatedDay =
 
-    useCallback(() => {
+        calculateArcDay(
 
-      if (!userData.startDate) return;
+          userData.startDate
 
+        );
 
+      setDayRecords(
 
-      if (
+        (currentRecords) => {
 
-        TEST_MODE &&
+          const updatedRecords = {
 
-        testDay !== null
+            ...currentRecords,
 
-      ) {
+          };
 
-        return;
+          const startDate =
 
-      }
+            parseLocalDate(
 
+              userData.startDate
 
+            );
 
-      const calculatedDay =
+          const todayDate =
 
-        calculateArcDay(
+            parseLocalDate(
 
-          userData.startDate
+              getLocalDateString()
 
-        );
+            );
 
+          startDate.setHours(0, 0, 0, 0);
 
+          todayDate.setHours(0, 0, 0, 0);
 
-      setDayRecords(
+          const difference =
 
-        (currentRecords) => {
+            todayDate.getTime() -
 
-          const updatedRecords = {
+            startDate.getTime();
 
-            ...currentRecords,
+          const daysPassed =
 
-          };
+            Math.floor(
 
+              difference /
 
+                (1000 *
 
-          const startDate =
+                  60 *
 
-            parseLocalDate(
+                  60 *
 
-              userData.startDate
+                  24)
 
-            );
+            );
 
+          const lastCompletedCalendarDay =
 
+            Math.min(
 
-          const todayDate =
+              daysPassed,
 
-            parseLocalDate(
+              TOTAL_DAYS - 1
 
-              getLocalDateString()
+            );
 
-            );
+          for (
 
+            let day = 1;
 
+            day <=
 
-          startDate.setHours(0, 0, 0, 0);
+            lastCompletedCalendarDay;
 
-          todayDate.setHours(0, 0, 0, 0);
+            day++
 
+          ) {
 
+            if (!updatedRecords[day]) {
 
-          const difference =
+              updatedRecords[day] =
 
-            todayDate.getTime() -
+                createMissedDayRecord(
 
-            startDate.getTime();
+                  day,
 
+                  defaultCoreGoals,
 
+                  []
 
-          const daysPassed =
+                );
 
-            Math.floor(
+            }
 
-              difference /
+          }
 
-                (1000 *
+          return updatedRecords;
 
-                  60 *
+        }
 
-                  60 *
+      );
 
-                  24)
+      setCurrentDay(calculatedDay);
 
-            );
+    }, [
 
+      userData.startDate,
 
+      testDay,
 
-          const lastCompletedCalendarDay =
+    ]);
 
-            Math.min(
+  // ==================================
 
-              daysPassed,
+  // INITIAL DAY CHECK
 
-              TOTAL_DAYS - 1
+  // ==================================
 
-            );
+  useEffect(() => {
 
+    if (!isSetupComplete) return;
 
+    if (
 
-          for (
+      TEST_MODE &&
 
-            let day = 1;
+      testDay !== null
 
-            day <=
+    ) {
 
-            lastCompletedCalendarDay;
+      return;
 
-            day++
+    }
 
-          ) {
+    processDayRollover();
 
-            if (!updatedRecords[day]) {
+  }, [
 
-              updatedRecords[day] =
+    isSetupComplete,
 
-                createMissedDayRecord(
+    processDayRollover,
 
-                  day,
+    testDay,
 
-                  defaultCoreGoals,
+  ]);
 
-                  []
+  // ==================================
 
-                );
+  // MIDNIGHT CHECK
 
-            }
+  // ==================================
 
-          }
+  useEffect(() => {
 
+    if (!isSetupComplete) return;
 
+    if (
 
-          return updatedRecords;
+      TEST_MODE &&
 
-        }
+      testDay !== null
 
-      );
+    ) {
 
+      return;
 
+    }
 
-      setCurrentDay(calculatedDay);
+    const scheduleMidnightCheck =
 
-    }, [
+      () => {
 
-      userData.startDate,
+        const midnight =
 
-      testDay,
+          getNextMidnight();
 
-    ]);
+        const milliseconds =
 
+          midnight.getTime() -
 
+          new Date().getTime();
 
-  // ==================================
+        const timeout =
 
-  // INITIAL DAY CHECK
+          setTimeout(() => {
 
-  // ==================================
+            processDayRollover();
 
+            scheduleMidnightCheck();
 
+          }, milliseconds + 100);
 
-  useEffect(() => {
+        return timeout;
 
-    if (!isSetupComplete) return;
+      };
 
+    const timeout =
 
+      scheduleMidnightCheck();
 
-    if (
+    return () =>
 
-      TEST_MODE &&
+      clearTimeout(timeout);
 
-      testDay !== null
+  }, [
 
-    ) {
+    isSetupComplete,
 
-      return;
+    processDayRollover,
 
-    }
+    testDay,
 
+  ]);
 
+  // ==================================
 
-    processDayRollover();
+  // VISIBILITY / FOCUS CHECK
 
-  }, [
+  // ==================================
 
-    isSetupComplete,
+  useEffect(() => {
 
-    processDayRollover,
+    if (!isSetupComplete) return;
 
-    testDay,
+    if (
 
-  ]);
+      TEST_MODE &&
 
+      testDay !== null
 
+    ) {
 
-  // ==================================
+      return;
 
-  // MIDNIGHT CHECK
+    }
 
-  // ==================================
+    const handleVisibilityChange =
 
+      () => {
 
+        if (
 
-  useEffect(() => {
+          document.visibilityState ===
 
-    if (!isSetupComplete) return;
+          "visible"
 
+        ) {
 
+          processDayRollover();
 
-    if (
+        }
 
-      TEST_MODE &&
+      };
 
-      testDay !== null
+    document.addEventListener(
 
-    ) {
+      "visibilitychange",
 
-      return;
+      handleVisibilityChange
 
-    }
+    );
 
+    window.addEventListener(
 
+      "focus",
 
-    const scheduleMidnightCheck =
+      processDayRollover
 
-      () => {
+    );
 
-        const midnight =
+    return () => {
 
-          getNextMidnight();
+      document.removeEventListener(
 
+        "visibilitychange",
 
+        handleVisibilityChange
 
-        const milliseconds =
+      );
 
-          midnight.getTime() -
+      window.removeEventListener(
 
-          new Date().getTime();
+        "focus",
 
+        processDayRollover
 
+      );
 
-        const timeout =
+    };
 
-          setTimeout(() => {
+  }, [
 
-            processDayRollover();
+    isSetupComplete,
 
-            scheduleMidnightCheck();
+    processDayRollover,
 
-          }, milliseconds + 100);
+    testDay,
 
+  ]);
 
+  // ==================================
 
-        return timeout;
+  // DAILY RESET
 
-      };
+  // ==================================
 
+  useEffect(() => {
 
+    if (!isSetupComplete) return;
 
-    const timeout =
+    if (
 
-      scheduleMidnightCheck();
+      TEST_MODE &&
 
+      testDay !== null
 
+    ) {
 
-    return () =>
+      return;
 
-      clearTimeout(timeout);
+    }
 
-  }, [
+    const savedDay =
 
-    isSetupComplete,
+      localStorage.getItem(
 
-    processDayRollover,
+        "winterArcLastOpenDay"
 
-    testDay,
+      );
 
-  ]);
+    if (
 
+      savedDay &&
 
+      Number(savedDay) !==
 
-  // ==================================
+        currentDay
 
-  // VISIBILITY / FOCUS CHECK
+    ) {
 
-  // ==================================
+      setGoals((currentGoals) =>
 
+        resetGoalsForNewDay(
 
+          currentGoals
 
-  useEffect(() => {
+        )
 
-    if (!isSetupComplete) return;
+      );
 
+      setOptionalGoals(
 
+        (currentGoals) =>
 
-    if (
+          resetGoalsForNewDay(
 
-      TEST_MODE &&
+            currentGoals
 
-      testDay !== null
+          )
 
-    ) {
+      );
 
-      return;
+    }
 
-    }
+    localStorage.setItem(
 
+      "winterArcLastOpenDay",
 
+      String(currentDay)
 
-    const handleVisibilityChange =
+    );
 
-      () => {
+  }, [
 
-        if (
+    currentDay,
 
-          document.visibilityState ===
+    isSetupComplete,
 
-          "visible"
+    testDay,
 
-        ) {
+  ]);
 
-          processDayRollover();
+  // ==================================
 
-        }
+  // ARC STATUS
 
-      };
+  // ==================================
 
+  useEffect(() => {
 
+    const status =
 
-    document.addEventListener(
+      calculateArcStatus(
 
-      "visibilitychange",
+        dayRecords,
 
-      handleVisibilityChange
+        activeDay
 
-    );
+      );
 
+    setArcStatus(status);
 
+  }, [
 
-    window.addEventListener(
+    dayRecords,
 
-      "focus",
+    activeDay,
 
-      processDayRollover
+  ]);
 
-    );
+  const missedDays =
 
+    getMissedDays(dayRecords);
 
-
-    return () => {
-
-      document.removeEventListener(
-
-        "visibilitychange",
-
-        handleVisibilityChange
-
-      );
-
-
-
-      window.removeEventListener(
-
-        "focus",
-
-        processDayRollover
-
-      );
-
-    };
-
-  }, [
-
-    isSetupComplete,
-
-    processDayRollover,
-
-    testDay,
-
-  ]);
-
-
-
-  // ==================================
-
-  // DAILY RESET
-
-  // ==================================
-
-
-
-  useEffect(() => {
-
-    if (!isSetupComplete) return;
-
-
-
-    if (
-
-      TEST_MODE &&
-
-      testDay !== null
-
-    ) {
-
-      return;
-
-    }
-
-
-
-    const savedDay =
-
-      localStorage.getItem(
-
-        "winterArcLastOpenDay"
-
-      );
-
-
-
-    if (
-
-      savedDay &&
-
-      Number(savedDay) !==
-
-        currentDay
-
-    ) {
-
-      setGoals((currentGoals) =>
-
-        resetGoalsForNewDay(
-
-          currentGoals
-
-        )
-
-      );
-
-
-
-      setOptionalGoals(
-
-        (currentGoals) =>
-
-          resetGoalsForNewDay(
-
-            currentGoals
-
-          )
-
-      );
-
-    }
-
-
-
-    localStorage.setItem(
-
-      "winterArcLastOpenDay",
-
-      String(currentDay)
-
-    );
-
-  }, [
-
-    currentDay,
-
-    isSetupComplete,
-
-    testDay,
-
-  ]);
-
-
-
-  // ==================================
-
-  // ARC STATUS
-
-  // ==================================
-
-
-
-  useEffect(() => {
-
-    const status =
-
-      calculateArcStatus(
-
-        dayRecords,
-
-        activeDay
-
-      );
-
-
-
-    setArcStatus(status);
-
-  }, [
-
-    dayRecords,
-
-    activeDay,
-
-  ]);
-
-
-
-  const missedDays =
-
-    getMissedDays(dayRecords);
-
-    // ==================================
+    // ==================================
 
 // ARC STATISTICS
 
 // ==================================
 
-
-
 const submittedRecords =
 
-  trackedDayRecords.filter(
+  trackedDayRecords.filter(
 
-    (record) =>
+    (record) =>
 
-      record.status === "submitted"
+      record.status === "submitted"
 
-  );
-
-
+  );
 
 const submittedDays =
 
-  submittedRecords.length;
-
-
+  submittedRecords.length;
 
 const missedDaysCount =
 
-  missedDays.length;
-
-
+  missedDays.length;
 
 const bestDayCompletion =
 
-  submittedRecords.length > 0
+  submittedRecords.length > 0
 
-    ? Math.max(
+    ? Math.max(
 
-        ...submittedRecords.map(
+        ...submittedRecords.map(
 
-          (record) =>
+          (record) =>
 
-            Number(record.completion) || 0
+            Number(record.completion) || 0
 
-        )
+        )
 
-      )
+      )
 
-    : 0;
-
-
+    : 0;
 
 const averageCompletion =
 
-  trackedDays > 0
+  trackedDays > 0
 
-    ? Math.round(
+    ? Math.round(
 
-        totalDailyCompletion /
+        totalDailyCompletion /
 
-          trackedDays
+          trackedDays
 
-      )
+      )
 
-    : 0;
+    : 0;
 
+  // ==================================
 
+  // TEST MODE
 
+  // ==================================
 
+  const simulateDay = (day) => {
 
-  // ==================================
+    if (
 
-  // TEST MODE
+      day < 1 ||
 
-  // ==================================
+      day > TOTAL_DAYS
 
+    ) {
 
+      return;
 
-  const simulateDay = (day) => {
+    }
 
-    if (
+    setTestDay(day);
 
-      day < 1 ||
+    setGoals((currentGoals) =>
 
-      day > TOTAL_DAYS
+      resetGoalsForNewDay(
 
-    ) {
+        currentGoals
 
-      return;
+      )
 
-    }
+    );
 
+    setOptionalGoals(
 
+      (currentGoals) =>
 
-    setTestDay(day);
+        resetGoalsForNewDay(
 
+          currentGoals
 
+        )
 
-    setGoals((currentGoals) =>
+    );
 
-      resetGoalsForNewDay(
+  };
 
-        currentGoals
+  const simulateNextDay = () => {
 
-      )
+    const day = activeDay;
 
-    );
+    if (!dayRecords[day]) {
 
+      const missedRecord =
 
+        createMissedDayRecord(
 
-    setOptionalGoals(
+          day,
 
-      (currentGoals) =>
+          goals,
 
-        resetGoalsForNewDay(
+          optionalGoals
 
-          currentGoals
+        );
 
-        )
+      setDayRecords(
 
-    );
+        (currentRecords) => ({
 
-  };
+          ...currentRecords,
 
+          [day]: missedRecord,
 
+        })
 
-  const simulateNextDay = () => {
+      );
 
-    const day = activeDay;
+    }
 
+    const nextDay = Math.min(
 
+      day + 1,
 
-    if (!dayRecords[day]) {
+      TOTAL_DAYS
 
-      const missedRecord =
+    );
 
-        createMissedDayRecord(
+    setTestDay(nextDay);
 
-          day,
+    setGoals((currentGoals) =>
 
-          goals,
+      resetGoalsForNewDay(
 
-          optionalGoals
+        currentGoals
 
-        );
+      )
 
+    );
 
+    setOptionalGoals(
 
-      setDayRecords(
+      (currentGoals) =>
 
-        (currentRecords) => ({
+        resetGoalsForNewDay(
 
-          ...currentRecords,
+          currentGoals
 
-          [day]: missedRecord,
+        )
 
-        })
+    );
 
-      );
+  };
 
-    }
+  // ==================================
 
+  // WEIGHT
 
+  // ==================================
 
-    const nextDay = Math.min(
+  const startingWeight =
 
-      day + 1,
+    userData.startingWeight;
 
-      TOTAL_DAYS
+  const targetWeight =
 
-    );
+    userData.targetWeight;
 
+  const handleWeightSubmit = () => {
 
+  if (
 
-    setTestDay(nextDay);
+    !todayWeight ||
 
+    Number(todayWeight) <= 0
 
+  ) {
 
-    setGoals((currentGoals) =>
+    alert("Please enter a valid weight.");
 
-      resetGoalsForNewDay(
+    return;
 
-        currentGoals
+  }
 
-      )
+  setWeightEntries((currentEntries) => ({
 
-    );
+    ...currentEntries,
 
+    [activeDay]: Number(todayWeight),
 
+  }));
 
-    setOptionalGoals(
-
-      (currentGoals) =>
-
-        resetGoalsForNewDay(
-
-          currentGoals
-
-        )
-
-    );
-
-  };
-
-
-
-  // ==================================
-
-  // WEIGHT
-
-  // ==================================
-
-
-
-  const startingWeight =
-
-    userData.startingWeight;
-
-
-
-  const targetWeight =
-
-    userData.targetWeight;
-
-  const handleWeightSubmit = () => {
-
-  if (
-
-    !todayWeight ||
-
-    Number(todayWeight) <= 0
-
-  ) {
-
-    alert("Please enter a valid weight.");
-
-    return;
-
-  }
-
-
-
-  setWeightEntries((currentEntries) => ({
-
-    ...currentEntries,
-
-    [activeDay]: Number(todayWeight),
-
-  }));
-
-
-
-  setTodayWeight("");
+  setTodayWeight("");
 
 };
 
-
-
 const latestSavedWeight =
-    weightDays.length > 0
-      ? weightEntries[weightDays[weightDays.length - 1]]
-      : null;
 
-  const currentWeight =
-    weightEntries[activeDay] ?? latestSavedWeight;
+    weightDays.length > 0
 
+      ? weightEntries[weightDays[weightDays.length - 1]]
 
+      : null;
+
+  const currentWeight =
+
+    weightEntries[activeDay] ?? latestSavedWeight;
 
 const startWeight = Number(startingWeight);
 
@@ -1757,2260 +1511,2005 @@ const goalWeight = Number(targetWeight);
 
 const latestWeight = Number(currentWeight);
 
-
-
 let weightProgress = 0;
-
-
 
 if (
 
-  startWeight > 0 &&
+  startWeight > 0 &&
 
-  goalWeight > 0 &&
+  goalWeight > 0 &&
 
-  latestWeight > 0 &&
+  latestWeight > 0 &&
 
-  startWeight !== goalWeight
+  startWeight !== goalWeight
 
 ) {
 
-  weightProgress = Math.round(
+  weightProgress = Math.round(
 
-    ((startWeight - latestWeight) /
+    ((startWeight - latestWeight) /
 
-      (startWeight - goalWeight)) *
+      (startWeight - goalWeight)) *
 
-      100
+      100
 
-  );
+  );
 
+  weightProgress = Math.max(
 
+    0,
 
-  weightProgress = Math.max(
+    Math.min(100, weightProgress)
 
-    0,
-
-    Math.min(100, weightProgress)
-
-  );
+  );
 
 }
 
+  // ==================================
 
+  // ARC STATUS TEXT
 
-  // ==================================
+  // ==================================
 
-  // ARC STATUS TEXT
+  const getStatusText = () => {
 
-  // ==================================
+    if (
 
+      arcStatus === "completed"
 
+    ) {
 
-  const getStatusText = () => {
+      return "🏆 ARC COMPLETED";
 
-    if (
+    }
 
-      arcStatus === "completed"
+    if (
 
-    ) {
+      arcStatus === "failed"
 
-      return "🏆 ARC COMPLETED";
+    ) {
 
-    }
+      return "❌ ARC FAILED";
 
+    }
 
+    return "🟢 ARC ACTIVE";
 
-    if (
+  };
 
-      arcStatus === "failed"
+  // ==================================
 
-    ) {
+  // 90-DAY CALENDAR
 
-      return "❌ ARC FAILED";
+  // ==================================
 
-    }
+  const calendarDays = Array.from(
 
+    { length: TOTAL_DAYS },
 
+    (_, index) => index + 1
 
-    return "🟢 ARC ACTIVE";
+  );
 
-  };
+  const getCalendarDayClass = (day) => {
 
-  // ==================================
-  // 90-DAY CALENDAR
-  // ==================================
+    const record = dayRecords[day];
 
-  const calendarDays = Array.from(
-    { length: TOTAL_DAYS },
-    (_, index) => index + 1
-  );
+    if (day === activeDay) {
 
-  const getCalendarDayClass = (day) => {
-    const record = dayRecords[day];
+      return "arc-calendar-day today";
 
-    if (day === activeDay) {
-      return "arc-calendar-day today";
-    }
+    }
 
-    if (record?.status === "submitted") {
-      return "arc-calendar-day completed";
-    }
+    if (record?.status === "submitted") {
 
-    if (record?.status === "missed") {
-      return "arc-calendar-day missed";
-    }
+      return "arc-calendar-day completed";
 
-    if (day < activeDay) {
-      return "arc-calendar-day missed";
-    }
+    }
 
-    return "arc-calendar-day future";
-  };
+    if (record?.status === "missed") {
 
-  const getCalendarDayLabel = (day) => {
-    const record = dayRecords[day];
+      return "arc-calendar-day missed";
 
-    if (record?.status === "submitted") {
-      return `${Number(record.completion) || 0}%`;
-    }
+    }
 
-    if (record?.status === "missed" || day < activeDay) {
-      return "Missed";
-    }
+    if (day < activeDay) {
 
-    if (day === activeDay) {
-      return "Today";
-    }
+      return "arc-calendar-day missed";
 
-    return "Future";
-  };
+    }
 
+    return "arc-calendar-day future";
 
+  };
 
+  const getCalendarDayLabel = (day) => {
 
-  // ==================================
+    const record = dayRecords[day];
 
-  // RETURN
+    if (record?.status === "submitted") {
 
-  // ==================================
+      return `${Number(record.completion) || 0}%`;
 
+    }
 
+    if (record?.status === "missed" || day < activeDay) {
+
+      return "Missed";
+
+    }
+
+    if (day === activeDay) {
+
+      return "Today";
+
+    }
+
+    return "Future";
+
+  };
+
+  // ==================================
+
+  // RETURN
+
+  // ==================================
+
+  if (authLoading) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "#f7faff",
+          color: "#245d91",
+          fontFamily: "Arial, Helvetica, sans-serif",
+        }}
+      >
+        <p>Loading Winter ARC...</p>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return <Auth />;
+  }
 
   return (
 
-    <>
+    <>
 
-      {!isSetupComplete ? (
+      {!isSetupComplete ? (
 
-        <Setup
+        <Setup
 
-          onStart={handleStart}
+          onStart={handleStart}
 
-        />
+        />
 
-      ) : (
+      ) : (
 
-        <div className="app">
+        <div className="app">
 
+          {/* ==================================
 
+              TEST MODE
 
-          {/* ==================================
+          ================================== */}
 
-              TEST MODE
+          {TEST_MODE && (
 
-          ================================== */}
+            <div
 
+              style={{
 
+                padding: "15px",
 
-          {TEST_MODE && (
+                marginBottom: "20px",
 
-            <div
+                border:
 
-              style={{
+                  "1px solid #555",
 
-                padding: "15px",
+                borderRadius: "10px",
 
-                marginBottom: "20px",
+                background: "#151515",
 
-                border:
+              }}
 
-                  "1px solid #555",
+            >
 
-                borderRadius: "10px",
+              <strong>
 
-                background: "#151515",
+                🧪 TEST MODE
 
-              }}
+              </strong>
 
-            >
+              <p
 
-              <strong>
+                style={{
 
-                🧪 TEST MODE
+                  marginTop: "6px",
 
-              </strong>
+                }}
 
+              >
 
+                Current Test Day:{" "}
 
-              <p
+                {String(activeDay).padStart(
 
-                style={{
+                  2,
 
-                  marginTop: "6px",
+                  "0"
 
-                }}
+                )}
 
-              >
+              </p>
 
-                Current Test Day:{" "}
+              <div
 
-                {String(activeDay).padStart(
+                style={{
 
-                  2,
+                  display: "flex",
 
-                  "0"
+                  gap: "8px",
 
-                )}
+                  flexWrap:
 
-              </p>
+                    "wrap",
 
+                  marginTop:
 
+                    "10px",
 
-              <div
+                }}
 
-                style={{
+              >
 
-                  display: "flex",
+                <button
 
-                  gap: "8px",
+                  onClick={() =>
 
-                  flexWrap:
+                    simulateDay(1)
 
-                    "wrap",
+                  }
 
-                  marginTop:
+                >
 
-                    "10px",
+                  Day 01
 
-                }}
+                </button>
 
-              >
+                <button
 
+                  onClick={() =>
 
+                    simulateDay(2)
 
-                <button
+                  }
 
-                  onClick={() =>
+                >
 
-                    simulateDay(1)
+                  Day 02
 
-                  }
+                </button>
 
-                >
+                <button
 
-                  Day 01
+                  onClick={() =>
 
-                </button>
+                    simulateDay(3)
 
+                  }
 
+                >
 
-                <button
+                  Day 03
 
-                  onClick={() =>
+                </button>
 
-                    simulateDay(2)
+                <button
 
-                  }
+                  onClick={() =>
 
-                >
+                    simulateDay(4)
 
-                  Day 02
+                  }
 
-                </button>
+                >
 
+                  Day 04
 
+                </button>
 
-                <button
+                <button
 
-                  onClick={() =>
+                  onClick={() =>
 
-                    simulateDay(3)
+                    simulateDay(90)
 
-                  }
+                  }
 
-                >
+                >
 
-                  Day 03
+                  Day 90
 
-                </button>
+                </button>
 
+                <button
 
+                  onClick={
 
-                <button
+                    simulateNextDay
 
-                  onClick={() =>
+                  }
 
-                    simulateDay(4)
+                >
 
-                  }
+                  🌙 Simulate Midnight
 
-                >
+                </button>
 
-                  Day 04
+              </div>
 
-                </button>
+            </div>
 
+          )}
 
+          {/* ==================================
 
-                <button
+              HEADER
 
-                  onClick={() =>
+          ================================== */}
 
-                    simulateDay(90)
+<header className="winter-header">
 
-                  }
+  <div className="winter-header-left">
 
-                >
+    <button
 
-                  Day 90
+      type="button"
 
-                </button>
+      className="winter-icon-button"
 
+      aria-label="Open navigation"
 
+      onClick={() =>
 
-                <button
+        document
 
-                  onClick={
+          .getElementById("winter-header-menu")
 
-                    simulateNextDay
+          ?.classList.toggle("is-open")
 
-                  }
+      }
 
-                >
+    >
 
-                  🌙 Simulate Midnight
+      <span className="winter-menu-icon">☰</span>
 
-                </button>
+    </button>
 
+    <div className="winter-greeting">
 
+      <p>WINTER ARC · DAY {activeDay}</p>
 
-              </div>
+      <h2>Hello, Manoj</h2>
 
-            </div>
+    </div>
 
-          )}
+  </div>
 
+  <div className="winter-header-right">
 
+    <button
 
-          {/* ==================================
+      type="button"
 
-              HEADER
+      className="winter-icon-button winter-notification"
 
-          ================================== */}
+      aria-label="Notifications"
 
+      title="Notifications coming soon"
 
+    >
 
-          <header className="header">
+      ♡
 
+    </button>
 
+    <button
 
-            <div className="header-title">
+      type="button"
 
-              {userData.photo ? (
+      className="winter-profile-button"
 
-                <img
+      aria-label="Profile and account"
 
-                  className="arc-start-photo"
+      title="Account settings coming soon"
 
-                  src={userData.photo}
+      onClick={() =>
 
-                  alt="Starting"
+        document
 
-                />
+          .getElementById("winter-profile-note")
 
-              ) : null}
+          ?.classList.toggle("is-open")
 
+      }
 
+    >
 
-              <div>
+      <span>MK</span>
 
-                <p className="small-title">
+    </button>
 
-                  90 DAY TRANSFORMATION
+  </div>
 
-                </p>
+  <nav id="winter-header-menu" className="winter-header-menu">
 
+    <button type="button" onClick={() => {
 
+      document.querySelector(".progress-card")
 
-                <h1>
+        ?.scrollIntoView({ behavior: "smooth" });
 
-                  ❄️ WINTER ARC
+    }}>
 
-                </h1>
+      Overview
 
-              </div>
+    </button>
 
-            </div>
+    <button type="button" onClick={() => {
 
+      document.querySelector(".goals-section")
 
+        ?.scrollIntoView({ behavior: "smooth" });
 
-            <div className="day-box">
+    }}>
 
+      Today's Goals
 
+    </button>
 
-              <span>
+    <button type="button" onClick={() => {
 
-                DAY
+      document.querySelector(".arc-calendar-card")
 
-              </span>
+        ?.scrollIntoView({ behavior: "smooth" });
 
+    }}>
 
+      Calendar
 
-              <strong>
+    </button>
 
-                {String(
+    <button type="button" onClick={() => {
 
-                  activeDay
+      document.querySelector(".arc-stats-card")
 
-                ).padStart(
+        ?.scrollIntoView({ behavior: "smooth" });
 
-                  2,
+    }}>
 
-                  "0"
+      Statistics
 
-                )}
+    </button>
 
-              </strong>
+  </nav>
 
+  <div id="winter-profile-note" className="winter-profile-note">
 
+    <strong>Winter ARC account</strong>
 
-              <span>
+    <p>Login and profile settings will be added in Phase 2.</p>
 
-                / {TOTAL_DAYS}
+  </div>
 
-              </span>
+</header>
 
+          <p className="arc-live-note">
 
+            {getStatusText()} • Stay consistent. One day at a time.
 
-            </div>
+          </p>
 
+          {/* ==================================
 
+              90-DAY ARC PROGRESS
 
-          </header>
+          ================================== */}
 
+          <section className="progress-card">
 
+            <div className="progress-circle">
 
-          
-          <p className="arc-live-note">
-            {getStatusText()} • Stay consistent. One day at a time.
-          </p>
+              <span>
 
-          {/* ==================================
+                {arcProgress}%
 
-              90-DAY ARC PROGRESS
+              </span>
 
-          ================================== */}
+            </div>
 
+            <div className="progress-info">
 
+              <p>
 
-          <section className="progress-card">
+                90-DAY ARC PROGRESS
 
+              </p>
 
+              <h2>
 
-            <div className="progress-circle">
+                {arcProgress}%
 
+              </h2>
 
+              <div className="progress-bar">
 
-              <span>
+                <div
 
-                {arcProgress}%
+                  className="progress-fill"
 
-              </span>
+                  style={{
 
+                    width: `${arcProgress}%`,
 
+                  }}
 
-            </div>
+                ></div>
 
+              </div>
 
+              <p>
 
-            <div className="progress-info">
+                {trackedDays} /{" "}
 
+                {TOTAL_DAYS}{" "}
 
+                days tracked
 
-              <p>
+              </p>
 
-                90-DAY ARC PROGRESS
+            </div>
 
-              </p>
+          </section>
 
+          {/* ==================================
 
+              TODAY'S COMPLETION
 
-              <h2>
+          ================================== */}
 
-                {arcProgress}%
+          <section className="weight-card">
 
-              </h2>
+            <div>
 
+              <p className="section-label">
 
+                🔥 TODAY'S COMPLETION
 
-              <div className="progress-bar">
+              </p>
 
+              <div className="weight-values">
 
+                <strong>
 
-                <div
+                  {completion}%
 
-                  className="progress-fill"
+                </strong>
 
-                  style={{
+                <span>
 
-                    width: `${arcProgress}%`,
+                  •
 
-                  }}
+                </span>
 
-                ></div>
+                <strong>
 
+                  Day{" "}
 
+                  {String(
 
-              </div>
+                    activeDay
 
+                  ).padStart(
 
+                    2,
 
-              <p>
+                    "0"
 
-                {trackedDays} /{" "}
+                  )}
 
-                {TOTAL_DAYS}{" "}
+                </strong>
 
-                days tracked
+              </div>
 
-              </p>
+              <p className="weight-description">
 
+                Today's goals completed
 
+              </p>
 
-            </div>
+            </div>
 
+            <div className="weight-progress">
 
+              <div className="weight-number">
 
-          </section>
+                {completedGoals}/
 
+                {goals.length}
 
+              </div>
 
-          {/* ==================================
+              <span>
 
-              TODAY'S COMPLETION
+                Goals
 
-          ================================== */}
+              </span>
 
+            </div>
 
+          </section>
 
-          <section className="weight-card">
+          {/* ==================================
 
+              WEIGHT GOAL
 
+          ================================== */}
 
-            <div>
+          <section className="weight-card">
 
+  <div>
 
+    <p className="section-label">
 
-              <p className="section-label">
+      🎯 WEIGHT GOAL
 
-                🔥 TODAY'S COMPLETION
+    </p>
 
-              </p>
+    <div className="weight-values">
 
+      <strong>
 
+        {startingWeight} kg
 
-              <div className="weight-values">
+      </strong>
 
+      <span>
 
+        →
 
-                <strong>
+      </span>
 
-                  {completion}%
+      <strong>
 
-                </strong>
+        {targetWeight} kg
 
+      </strong>
 
+    </div>
 
-                <span>
+    <p className="weight-description">
 
-                  •
+      Starting weight → Target weight
 
-                </span>
+      {weightLost > 0
 
+        ? ` • ${weightLost} kg lost`
 
+        : weightLost < 0
 
-                <strong>
+        ? ` • ${Math.abs(weightLost)} kg gained`
 
-                  Day{" "}
+        : ""}
 
-                  {String(
+    </p>
 
-                    activeDay
+    <div
 
-                  ).padStart(
+      style={{
 
-                    2,
+        display: "flex",
 
-                    "0"
+        gap: "8px",
 
-                  )}
+        marginTop: "15px",
 
-                </strong>
+      }}
 
+    >
 
+      <input
 
-              </div>
+        type="number"
 
+        step="0.1"
 
+        min="1"
 
-              <p className="weight-description">
+        placeholder="Today's weight"
 
-                Today's goals completed
+        value={todayWeight}
 
-              </p>
+        onChange={(e) =>
 
+          setTodayWeight(e.target.value)
 
+        }
 
-            </div>
+        style={{
 
+          width: "150px",
 
+          padding: "10px",
 
-            <div className="weight-progress">
+          borderRadius: "8px",
 
+          border: "1px solid #333",
 
+          background: "#181818",
 
-              <div className="weight-number">
+          color: "white",
 
-                {completedGoals}/
+        }}
 
-                {goals.length}
+      />
 
-              </div>
+      <button
 
+        onClick={handleWeightSubmit}
 
+        style={{
 
-              <span>
+          padding: "10px 15px",
 
-                Goals
+          borderRadius: "8px",
 
-              </span>
+          border: "1px solid #444",
 
+          background: "#222",
 
+          color: "white",
 
-            </div>
+          cursor: "pointer",
 
+        }}
 
+      >
 
-          </section>
+        Save
 
+      </button>
 
+    </div>
 
-          {/* ==================================
+  </div>
 
-              WEIGHT GOAL
+  <div className="weight-progress">
 
-          ================================== */}
+    <div className="weight-number">
 
+      {latestWeight > 0
 
+        ? `${latestWeight} kg`
 
-          <section className="weight-card">
+        : "--"}
 
+    </div>
 
+    <span>
 
-  <div>
+      {weightProgress}% Progress
 
+    </span>
 
-
-    <p className="section-label">
-
-      🎯 WEIGHT GOAL
-
-    </p>
-
-
-
-    <div className="weight-values">
-
-
-
-      <strong>
-
-        {startingWeight} kg
-
-      </strong>
-
-
-
-      <span>
-
-        →
-
-      </span>
-
-
-
-      <strong>
-
-        {targetWeight} kg
-
-      </strong>
-
-
-
-    </div>
-
-
-
-    <p className="weight-description">
-
-      Starting weight → Target weight
-
-      {weightLost > 0
-
-        ? ` • ${weightLost} kg lost`
-
-        : weightLost < 0
-
-        ? ` • ${Math.abs(weightLost)} kg gained`
-
-        : ""}
-
-    </p>
-
-
-
-    <div
-
-      style={{
-
-        display: "flex",
-
-        gap: "8px",
-
-        marginTop: "15px",
-
-      }}
-
-    >
-
-
-
-      <input
-
-        type="number"
-
-        step="0.1"
-
-        min="1"
-
-        placeholder="Today's weight"
-
-        value={todayWeight}
-
-        onChange={(e) =>
-
-          setTodayWeight(e.target.value)
-
-        }
-
-        style={{
-
-          width: "150px",
-
-          padding: "10px",
-
-          borderRadius: "8px",
-
-          border: "1px solid #333",
-
-          background: "#181818",
-
-          color: "white",
-
-        }}
-
-      />
-
-
-
-      <button
-
-        onClick={handleWeightSubmit}
-
-        style={{
-
-          padding: "10px 15px",
-
-          borderRadius: "8px",
-
-          border: "1px solid #444",
-
-          background: "#222",
-
-          color: "white",
-
-          cursor: "pointer",
-
-        }}
-
-      >
-
-        Save
-
-      </button>
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-  <div className="weight-progress">
-
-
-
-    <div className="weight-number">
-
-      {latestWeight > 0
-
-        ? `${latestWeight} kg`
-
-        : "--"}
-
-    </div>
-
-
-
-    <span>
-
-      {weightProgress}% Progress
-
-    </span>
-
-
-
-  </div>
-
-
+  </div>
 
 </section>
 
-          {/* ==================================
+          {/* ==================================
 
-              CORE GOALS
+              CORE GOALS
 
-          ================================== */}
+          ================================== */}
 
+          <section className="goals-section">
 
+            <div className="section-heading">
 
-          <section className="goals-section">
+              <div>
 
+                <p className="section-label">
 
+                  🔥 YOUR CORE GOALS
 
-            <div className="section-heading">
+                </p>
 
+                <h2>
 
+                  Today's Goals
 
-              <div>
+                </h2>
 
+              </div>
 
+              <span className="goal-count">
 
-                <p className="section-label">
+                {completedGoals}/
 
-                  🔥 YOUR CORE GOALS
+                {goals.length}
 
-                </p>
+              </span>
 
+            </div>
 
+            <div className="goals-list">
 
-                <h2>
+              {goals.map(
 
-                  Today's Goals
+                (goal, index) => (
 
-                </h2>
+                  <div
 
+                    className={`goal-card ${
 
+                      goal.completed
 
-              </div>
+                        ? "completed"
 
+                        : ""
 
+                    } ${
 
-              <span className="goal-count">
+                      isDaySubmitted
 
-                {completedGoals}/
+                        ? "locked"
 
-                {goals.length}
+                        : ""
 
-              </span>
+                    }`}
 
+                    key={goal.name}
 
+                    onClick={() =>
 
-            </div>
+                      toggleGoal(
 
+                        index
 
+                      )
 
-            <div className="goals-list">
+                    }
 
+                  >
 
+                    <div className="goal-left">
 
-              {goals.map(
+                      <div className="goal-icon">
 
-                (goal, index) => (
+                        {goal.icon}
 
+                      </div>
 
+                      <div>
 
-                  <div
+                        <h3>
 
-                    className={`goal-card ${
+                          {goal.name}
 
-                      goal.completed
+                        </h3>
 
-                        ? "completed"
+                        <p>
 
-                        : ""
+                          {goal.completed
 
-                    } ${
+                            ? "Completed"
 
-                      isDaySubmitted
+                            : isDaySubmitted
 
-                        ? "locked"
+                            ? "Day submitted"
 
-                        : ""
+                            : "Tap to update"}
 
-                    }`}
+                        </p>
 
-                    key={goal.name}
+                      </div>
 
-                    onClick={() =>
+                    </div>
 
-                      toggleGoal(
+                    <div className="goal-status">
 
-                        index
+                      {goal.completed
 
-                      )
+                        ? "✓"
 
-                    }
+                        : "○"}
 
-                  >
+                    </div>
 
+                  </div>
 
+                )
 
-                    <div className="goal-left">
+              )}
 
+            </div>
 
+          </section>
 
-                      <div className="goal-icon">
+          {/* ==================================
 
-                        {goal.icon}
+              DISCIPLINE SCORE
 
-                      </div>
+          ================================== */}
 
+          <section className="discipline-card">
 
+            <div>
 
-                      <div>
+              <p className="section-label">
 
+                🔥 DISCIPLINE SCORE
 
+              </p>
 
-                        <h3>
+              <h2>
 
-                          {goal.name}
+                {disciplineScore}%
 
-                        </h3>
+              </h2>
 
+              <p>
 
+                Based on your consistency
 
-                        <p>
+                across core goals.
 
-                          {goal.completed
+              </p>
 
-                            ? "Completed"
+            </div>
 
-                            : isDaySubmitted
+            <div className="discipline-circle">
 
-                            ? "Day submitted"
+              {disciplineScore}%
 
-                            : "Tap to update"}
+            </div>
 
-                        </p>
+          </section>
 
+          {/* ==================================
 
+              SUBMIT DAY
 
-                      </div>
+          ================================== */}
 
+          <section className="submit-section">
 
+            {!isDaySubmitted ? (
 
-                    </div>
+              <button
 
+                className="submit-day-button"
 
+                onClick={
 
-                    <div className="goal-status">
+                  handleSubmitDay
 
-                      {goal.completed
+                }
 
-                        ? "✓"
+              >
 
-                        : "○"}
+                SUBMIT DAY{" "}
 
-                    </div>
+                {String(
 
+                  activeDay
 
+                ).padStart(
 
-                  </div>
+                  2,
 
+                  "0"
 
+                )}{" "}
 
-                )
+                🔥
 
-              )}
+              </button>
 
+            ) : (
 
+              <div className="submitted-message">
 
-            </div>
+                <strong>
 
+                  ✅ DAY{" "}
 
+                  {String(
 
-          </section>
+                    activeDay
 
+                  ).padStart(
 
+                    2,
 
-          {/* ==================================
+                    "0"
 
-              DISCIPLINE SCORE
+                  )}{" "}
 
-          ================================== */}
+                  SUBMITTED
 
+                </strong>
 
+                <span>
 
-          <section className="discipline-card">
+                  {completedGoals}/
 
+                  {goals.length}
 
+                  {" "}
 
-            <div>
+                  goals completed •{" "}
 
+                  {completion}%
 
+                </span>
 
-              <p className="section-label">
+              </div>
 
-                🔥 DISCIPLINE SCORE
+            )}
 
-              </p>
+          </section>
 
+          {/* ==================================
 
+              90-DAY CALENDAR
 
-              <h2>
+          ================================== */}
 
-                {disciplineScore}%
+          {/* ==================================
 
-              </h2>
+              STREAK & ARC STATS
 
+          ================================== */}
 
+          <section className="arc-stats-card">
 
-              <p>
+            <div className="section-heading">
 
-                Based on your consistency
+              <div>
 
-                across core goals.
+                <p className="section-label">🔥 ARC STATS</p>
 
-              </p>
+                <h2>Your Consistency</h2>
 
+              </div>
 
+            </div>
 
-            </div>
+            <div className="arc-stats-grid">
 
+              <div className="arc-stat-box highlight">
 
+                <span>CURRENT STREAK</span>
 
-            <div className="discipline-circle">
+                <strong>{currentStreak}</strong>
 
-              {disciplineScore}%
+                <small>{currentStreak === 1 ? "day" : "days"}</small>
 
-            </div>
+              </div>
 
+              <div className="arc-stat-box">
 
+                <span>LONGEST STREAK</span>
 
-          </section>
+                <strong>{longestStreak}</strong>
 
+                <small>{longestStreak === 1 ? "day" : "days"}</small>
 
+              </div>
 
-          {/* ==================================
+              <div className="arc-stat-box">
 
-              SUBMIT DAY
+                <span>COMPLETED DAYS</span>
 
-          ================================== */}
+                <strong>{submittedDays}</strong>
 
+                <small>of {TOTAL_DAYS}</small>
 
+              </div>
 
-          <section className="submit-section">
+              <div className="arc-stat-box">
 
+                <span>MISSED DAYS</span>
 
+                <strong>{missedDaysCount}</strong>
 
-            {!isDaySubmitted ? (
+                <small>days</small>
 
+              </div>
 
+              <div className="arc-stat-box">
 
-              <button
+                <span>BEST DAY</span>
 
-                className="submit-day-button"
+                <strong>{bestDayCompletion}%</strong>
 
-                onClick={
+                <small>completion</small>
 
-                  handleSubmitDay
+              </div>
 
-                }
+              <div className="arc-stat-box">
 
-              >
+                <span>AVERAGE</span>
 
-                SUBMIT DAY{" "}
+                <strong>{averageCompletion}%</strong>
 
-                {String(
+                <small>completion</small>
 
-                  activeDay
+              </div>
 
-                ).padStart(
+            </div>
 
-                  2,
+          </section>
 
-                  "0"
+          <section className="arc-calendar-card">
 
-                )}{" "}
+            <div className="section-heading">
 
-                🔥
+              <div>
 
-              </button>
+                <p className="section-label">🗓️ WINTER ARC CALENDAR</p>
 
+                <h2>90-Day Journey</h2>
 
+                <p className="arc-calendar-subtitle">
 
-            ) : (
+                  Track every day of your Winter ARC at a glance.
 
+                </p>
 
+              </div>
 
-              <div className="submitted-message">
+            </div>
 
+            <div className="arc-calendar-legend">
 
+              <span>
 
-                <strong>
+                <i className="legend-dot completed"></i>
 
-                  ✅ DAY{" "}
+                Completed
 
-                  {String(
+              </span>
 
-                    activeDay
+              <span>
 
-                  ).padStart(
+                <i className="legend-dot missed"></i>
 
-                    2,
+                Missed
 
-                    "0"
+              </span>
 
-                  )}{" "}
+              <span>
 
-                  SUBMITTED
+                <i className="legend-dot today"></i>
 
-                </strong>
+                Today
 
+              </span>
 
+              <span>
 
-                <span>
+                <i className="legend-dot future"></i>
 
-                  {completedGoals}/
+                Future
 
-                  {goals.length}
+              </span>
 
-                  {" "}
+            </div>
 
-                  goals completed •{" "}
+            <div className="arc-calendar-grid">
 
-                  {completion}%
+              {calendarDays.map((day) => {
 
-                </span>
+                const record = dayRecords[day];
 
+                const completionValue =
 
+                  Number(record?.completion) || 0;
 
-              </div>
+                return (
 
+                  <div
 
+                    key={day}
 
-            )}
+                    className={getCalendarDayClass(day)}
 
+                    title={`Day ${String(day).padStart(2, "0")} • ${getCalendarDayLabel(day)}`}
 
+                  >
 
-          </section>
+                    <span className="calendar-day-number">
 
-          {/* ==================================
-              90-DAY CALENDAR
-          ================================== */}
+                      {String(day).padStart(2, "0")}
 
-          
-          {/* ==================================
-              STREAK & ARC STATS
-          ================================== */}
+                    </span>
 
-          <section className="arc-stats-card">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">🔥 ARC STATS</p>
-                <h2>Your Consistency</h2>
-              </div>
-            </div>
+                    <span className="calendar-day-status">
 
-            <div className="arc-stats-grid">
-              <div className="arc-stat-box highlight">
-                <span>CURRENT STREAK</span>
-                <strong>{currentStreak}</strong>
-                <small>{currentStreak === 1 ? "day" : "days"}</small>
-              </div>
+                      {day === activeDay && !record
 
-              <div className="arc-stat-box">
-                <span>LONGEST STREAK</span>
-                <strong>{longestStreak}</strong>
-                <small>{longestStreak === 1 ? "day" : "days"}</small>
-              </div>
+                        ? "🔥"
 
-              <div className="arc-stat-box">
-                <span>COMPLETED DAYS</span>
-                <strong>{submittedDays}</strong>
-                <small>of {TOTAL_DAYS}</small>
-              </div>
+                        : record?.status === "submitted"
 
-              <div className="arc-stat-box">
-                <span>MISSED DAYS</span>
-                <strong>{missedDaysCount}</strong>
-                <small>days</small>
-              </div>
+                        ? "✓"
 
-              <div className="arc-stat-box">
-                <span>BEST DAY</span>
-                <strong>{bestDayCompletion}%</strong>
-                <small>completion</small>
-              </div>
+                        : record?.status === "missed" || day < activeDay
 
-              <div className="arc-stat-box">
-                <span>AVERAGE</span>
-                <strong>{averageCompletion}%</strong>
-                <small>completion</small>
-              </div>
-            </div>
-          </section>
+                        ? "×"
 
-          <section className="arc-calendar-card">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">🗓️ WINTER ARC CALENDAR</p>
-                <h2>90-Day Journey</h2>
-                <p className="arc-calendar-subtitle">
-                  Track every day of your Winter ARC at a glance.
-                </p>
-              </div>
-            </div>
+                        : ""}
 
-            <div className="arc-calendar-legend">
-              <span>
-                <i className="legend-dot completed"></i>
-                Completed
-              </span>
-              <span>
-                <i className="legend-dot missed"></i>
-                Missed
-              </span>
-              <span>
-                <i className="legend-dot today"></i>
-                Today
-              </span>
-              <span>
-                <i className="legend-dot future"></i>
-                Future
-              </span>
-            </div>
+                    </span>
 
-            <div className="arc-calendar-grid">
-              {calendarDays.map((day) => {
-                const record = dayRecords[day];
-                const completionValue =
-                  Number(record?.completion) || 0;
+                    {record?.status === "submitted" && (
 
-                return (
-                  <div
-                    key={day}
-                    className={getCalendarDayClass(day)}
-                    title={`Day ${String(day).padStart(2, "0")} • ${getCalendarDayLabel(day)}`}
-                  >
-                    <span className="calendar-day-number">
-                      {String(day).padStart(2, "0")}
-                    </span>
+                      <span className="calendar-day-percent">
 
-                    <span className="calendar-day-status">
-                      {day === activeDay && !record
-                        ? "🔥"
-                        : record?.status === "submitted"
-                        ? "✓"
-                        : record?.status === "missed" || day < activeDay
-                        ? "×"
-                        : ""}
-                    </span>
+                        {completionValue}%
 
-                    {record?.status === "submitted" && (
-                      <span className="calendar-day-percent">
-                        {completionValue}%
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+                      </span>
 
+                    )}
 
+                  </div>
 
+                );
 
+              })}
 
-          {/* ==================================
+            </div>
 
-              ARC HISTORY
+          </section>
 
-          ================================== */}
+          {/* ==================================
 
+              ARC HISTORY
 
+          ================================== */}
 
-          <section className="history-card">
+          <section className="history-card">
 
+            <div className="section-heading">
 
+              <div>
 
-            <div className="section-heading">
+                <p className="section-label">
 
+                  📅 ARC HISTORY
 
+                </p>
 
-              <div>
+                <h2>
 
+                  90-Day Journey
 
+                </h2>
 
-                <p className="section-label">
+              </div>
 
-                  📅 ARC HISTORY
+              <button
 
-                </p>
+                className="history-toggle"
 
+                onClick={() =>
 
+                  setShowHistory(
 
-                <h2>
+                    !showHistory
 
-                  90-Day Journey
+                  )
 
-                </h2>
+                }
 
+              >
 
+                {showHistory
 
-              </div>
+                  ? "Hide"
 
+                  : "View"}
 
+              </button>
 
-              <button
+            </div>
 
-                className="history-toggle"
+            {showHistory && (
 
-                onClick={() =>
+              <div className="history-list">
 
-                  setShowHistory(
+                {historyDays.map(
 
-                    !showHistory
+                  (day) => {
 
-                  )
+                    const record =
 
-                }
+                      dayRecords[
 
-              >
+                        day
 
-                {showHistory
+                      ];
 
-                  ? "Hide"
+                    const isCurrent =
 
-                  : "View"}
+                      day ===
 
-              </button>
+                      activeDay;
 
+                    const status =
 
+                      record?.status;
 
-            </div>
+                    const dayCompletion =
 
+                      Number(
 
+                        record?.completion
 
-            {showHistory && (
+                      ) || 0;
 
+                    return (
 
+                      <div
 
-              <div className="history-list">
+                        key={day}
 
+                        className={`history-row ${
 
+                          isCurrent
 
-                {historyDays.map(
+                            ? "history-current"
 
-                  (day) => {
+                            : ""
 
+                        }`}
 
+                      >
 
-                    const record =
+                        <div className="history-day">
 
-                      dayRecords[
+                          <span>
 
-                        day
+                            DAY
 
-                      ];
+                          </span>
 
+                          <strong>
 
+                            {String(
 
-                    const isCurrent =
+                              day
 
-                      day ===
+                            ).padStart(
 
-                      activeDay;
+                              2,
 
+                              "0"
 
+                            )}
 
-                    const status =
+                          </strong>
 
-                      record?.status;
+                        </div>
 
+                        <div className="history-progress">
 
+                          <div className="history-bar">
 
-                    const dayCompletion =
+                            <div
 
-                      Number(
+                              className="history-fill"
 
-                        record?.completion
+                              style={{
 
-                      ) || 0;
+                                width: `${dayCompletion}%`,
 
+                              }}
 
+                            />
 
-                    return (
+                          </div>
 
-                      <div
+                          <span>
 
-                        key={day}
+                            {record
 
-                        className={`history-row ${
+                              ? `${dayCompletion}%`
 
-                          isCurrent
+                              : "Not tracked"}
 
-                            ? "history-current"
+                          </span>
 
-                            : ""
+                        </div>
 
-                        }`}
+                        <div className="history-status">
 
-                      >
+                          {status ===
 
+                            "submitted" && (
 
+                            <span className="status-submitted">
 
-                        <div className="history-day">
+                              ✅ Submitted
 
+                            </span>
 
+                          )}
 
-                          <span>
+                          {status ===
 
-                            DAY
+                            "missed" && (
 
-                          </span>
+                            <span className="status-missed">
 
+                              ❌ Missed
 
+                            </span>
 
-                          <strong>
+                          )}
 
-                            {String(
+                          {!status &&
 
-                              day
+                            isCurrent && (
 
-                            ).padStart(
+                            <span className="status-current">
 
-                              2,
+                              🔥 Today
 
-                              "0"
+                            </span>
 
-                            )}
+                          )}
 
-                          </strong>
+                          {!status &&
 
+                            !isCurrent && (
 
+                            <span className="status-future">
 
-                        </div>
+                              —
 
+                            </span>
 
+                          )}
 
-                        <div className="history-progress">
+                        </div>
 
+                      </div>
 
+                    );
 
-                          <div className="history-bar">
+                  }
 
+                )}
 
+              </div>
 
-                            <div
+            )}
 
-                              className="history-fill"
-
-                              style={{
-
-                                width: `${dayCompletion}%`,
-
-                              }}
-
-                            />
-
-
-
-                          </div>
-
-
-
-                          <span>
-
-                            {record
-
-                              ? `${dayCompletion}%`
-
-                              : "Not tracked"}
-
-                          </span>
-
-
-
-                        </div>
-
-
-
-                        <div className="history-status">
-
-
-
-                          {status ===
-
-                            "submitted" && (
-
-                            <span className="status-submitted">
-
-                              ✅ Submitted
-
-                            </span>
-
-                          )}
-
-
-
-                          {status ===
-
-                            "missed" && (
-
-                            <span className="status-missed">
-
-                              ❌ Missed
-
-                            </span>
-
-                          )}
-
-
-
-                          {!status &&
-
-                            isCurrent && (
-
-                            <span className="status-current">
-
-                              🔥 Today
-
-                            </span>
-
-                          )}
-
-
-
-                          {!status &&
-
-                            !isCurrent && (
-
-                            <span className="status-future">
-
-                              —
-
-                            </span>
-
-                          )}
-
-
-
-                        </div>
-
-
-
-                      </div>
-
-                    );
-
-                  }
-
-                )}
-
-
-
-              </div>
-
-
-
-            )}
-
-
-
-          </section>
+          </section>
 
 {/* ==================================
 
-    WEIGHT HISTORY
+    WEIGHT HISTORY
 
-\================================== */}
-
-
+\\================================== */}
 
 <section className="weight-history-card">
 
+  <div className="section-heading">
 
+    <div>
 
-  <div className="section-heading">
+      <p className="section-label">
 
+        ⚖️ WEIGHT HISTORY
 
+      </p>
 
-    <div>
+      <h2>
 
-      <p className="section-label">
+        Weight Progress
 
-        ⚖️ WEIGHT HISTORY
+      </h2>
 
-      </p>
+      {totalWeightEntries > 0 ? (
 
+        <p className="weight-description">
 
+          {weightLost > 0
 
-      <h2>
+            ? `${weightLost} kg lost`
 
-        Weight Progress
+            : weightLost < 0
 
-      </h2>
+            ? `${Math.abs(weightLost)} kg gained`
 
-      {totalWeightEntries > 0 ? (
+            : "No change yet"}
 
-        <p className="weight-description">
+        </p>
 
-          {weightLost > 0
+      ) : null}
 
-            ? `${weightLost} kg lost`
+    </div>
 
-            : weightLost < 0
+  </div>
 
-            ? `${Math.abs(weightLost)} kg gained`
+  {Object.keys(weightEntries).length === 0 ? (
 
-            : "No change yet"}
+    <p className="weight-history-empty">
 
-        </p>
+      No weight entries yet.
 
-      ) : null}
+      Start tracking from today.
 
-    </div>
+    </p>
 
+  ) : (
 
+    <div className="weight-history-list">
 
-  </div>
+      {Object.entries(weightEntries)
 
+        .sort(
 
+          ([dayA], [dayB]) =>
 
-  {Object.keys(weightEntries).length === 0 ? (
+            Number(dayA) - Number(dayB)
 
+        )
 
+        .map(([day, weight]) => (
 
-    <p className="weight-history-empty">
+          <div
 
-      No weight entries yet.
+            className="weight-history-row"
 
-      Start tracking from today.
+            key={day}
 
-    </p>
+          >
 
+            <div className="weight-history-day">
 
+              <span>DAY</span>
 
-  ) : (
+              <strong>
 
+                {String(day).padStart(
 
+                  2,
 
-    <div className="weight-history-list">
+                  "0"
 
+                )}
 
+              </strong>
 
-      {Object.entries(weightEntries)
+            </div>
 
-        .sort(
+            <div className="weight-history-value">
 
-          ([dayA], [dayB]) =>
+              {weight} kg
 
-            Number(dayA) - Number(dayB)
+            </div>
 
-        )
+            <div className="weight-history-status">
 
-        .map(([day, weight]) => (
+              {Number(weight) <
 
+              Number(startingWeight)
 
+                ? "📉"
 
-          <div
+                : Number(weight) >
 
-            className="weight-history-row"
+                  Number(startingWeight)
 
-            key={day}
+                ? "📈"
 
-          >
+                : "—"}
 
+            </div>
 
+          </div>
 
-            <div className="weight-history-day">
+        ))}
 
-              <span>DAY</span>
+    </div>
 
-
-
-              <strong>
-
-                {String(day).padStart(
-
-                  2,
-
-                  "0"
-
-                )}
-
-              </strong>
-
-            </div>
-
-
-
-            <div className="weight-history-value">
-
-              {weight} kg
-
-            </div>
-
-
-
-            <div className="weight-history-status">
-
-              {Number(weight) <
-
-              Number(startingWeight)
-
-                ? "📉"
-
-                : Number(weight) >
-
-                  Number(startingWeight)
-
-                ? "📈"
-
-                : "—"}
-
-            </div>
-
-
-
-          </div>
-
-
-
-        ))}
-
-
-
-    </div>
-
-
-
-  )}
-
-
+  )}
 
 </section>
 
-          {/* ==================================
+          {/* ==================================
 
-              OPTIONAL GOALS
+              OPTIONAL GOALS
 
-          ================================== */}
+          ================================== */}
 
+          <section className="optional-card">
 
+            <div>
 
-          <section className="optional-card">
+              <p className="section-label">
 
+                ⚙️ OPTIONAL GOALS
 
+              </p>
 
-            <div>
+              <h2>
 
+                Personalize Your ARC
 
+              </h2>
 
-              <p className="section-label">
+              <p>
 
-                ⚙️ OPTIONAL GOALS
+                Add sleep, water,
 
-              </p>
+                reading, meditation,
 
+                study or your own
 
+                habits.
 
-              <h2>
+              </p>
 
-                Personalize Your ARC
+            </div>
 
-              </h2>
+            <button
 
+              onClick={() =>
 
+                setShowAddGoal(
 
-              <p>
+                  true
 
-                Add sleep, water,
+                )
 
-                reading, meditation,
+              }
 
-                study or your own
+            >
 
-                habits.
+              + Add Goal
 
-              </p>
+            </button>
 
+          </section>
 
+          {/* ==================================
 
-            </div>
+              OPTIONAL GOALS LIST
 
+          ================================== */}
 
+          {optionalGoals.length >
 
-            <button
+            0 && (
 
-              onClick={() =>
+            <section className="optional-goals-list">
 
-                setShowAddGoal(
+              {optionalGoals.map(
 
-                  true
+                (goal) => (
 
-                )
+                  <div
 
-              }
+                    className={`goal-card optional-goal ${
 
-            >
+                      goal.completed
 
-              + Add Goal
+                        ? "completed"
 
-            </button>
+                        : ""
 
+                    } ${
 
+                      isDaySubmitted
 
-          </section>
+                        ? "locked"
 
+                        : ""
 
+                    }`}
 
-          {/* ==================================
+                    key={goal.id}
 
-              OPTIONAL GOALS LIST
+                    onClick={() =>
 
-          ================================== */}
+                      toggleOptionalGoal(
 
+                        goal.id
 
+                      )
 
-          {optionalGoals.length >
+                    }
 
-            0 && (
+                  >
 
+                    <div className="goal-left">
 
+                      <div className="goal-icon">
 
-            <section className="optional-goals-list">
+                        {goal.icon}
 
+                      </div>
 
+                      <div>
 
-              {optionalGoals.map(
+                        <h3>
 
-                (goal) => (
+                          {goal.name}
 
+                        </h3>
 
+                        <p>
 
-                  <div
+                          {goal.completed
 
-                    className={`goal-card optional-goal ${
+                            ? "Completed"
 
-                      goal.completed
+                            : isDaySubmitted
 
-                        ? "completed"
+                            ? "Day submitted"
 
-                        : ""
+                            : "Tap to update"}
 
-                    } ${
+                        </p>
 
-                      isDaySubmitted
+                      </div>
 
-                        ? "locked"
+                    </div>
 
-                        : ""
+                    <div className="goal-right">
 
-                    }`}
+                      <div className="goal-status">
 
-                    key={goal.id}
+                        {goal.completed
 
-                    onClick={() =>
+                          ? "✓"
 
-                      toggleOptionalGoal(
+                          : "○"}
 
-                        goal.id
+                      </div>
 
-                      )
+                      <button
 
-                    }
+                        type="button"
 
-                  >
+                        className="optional-goal-delete"
 
+                        onClick={(event) => {
 
+                          event.stopPropagation();
 
-                    <div className="goal-left">
+                          deleteOptionalGoal(goal.id);
 
+                        }}
 
+                        disabled={isDaySubmitted}
 
-                      <div className="goal-icon">
+                      >
 
-                        {goal.icon}
+                        ×
 
-                      </div>
+                      </button>
 
+                    </div>
 
+                  </div>
 
-                      <div>
+                )
 
+              )}
 
+            </section>
 
-                        <h3>
+          )}
 
-                          {goal.name}
+          {/* ==================================
 
-                        </h3>
+              ADD GOAL POPUP
 
+          ================================== */}
 
+          {showAddGoal && (
 
-                        <p>
+            <div className="add-goal-overlay">
 
-                          {goal.completed
+              <div className="add-goal-modal">
 
-                            ? "Completed"
+                <h2>
 
-                            : isDaySubmitted
+                  ➕ Add Your Goal
 
-                            ? "Day submitted"
+                </h2>
 
-                            : "Tap to update"}
+                <p>
 
-                        </p>
+                  Create a personal
 
+                  goal for your ARC.
 
+                </p>
 
-                      </div>
+                <input
 
+                  type="text"
 
+                  placeholder="Goal name"
 
-                    </div>
+                  value={
 
+                    newGoalName
 
+                  }
 
-                    <div className="goal-right">
+                  onChange={(e) =>
 
-                      <div className="goal-status">
+                    setNewGoalName(
 
-                        {goal.completed
+                      e.target.value
 
-                          ? "✓"
+                    )
 
-                          : "○"}
+                  }
 
-                      </div>
+                />
 
+                <div className="icon-options">
 
+                  {[
 
-                      <button
+                    "🎯",
 
-                        type="button"
+                    "💧",
 
-                        className="optional-goal-delete"
+                    "📚",
 
-                        onClick={(event) => {
+                    "😴",
 
-                          event.stopPropagation();
+                    "🧘",
 
-                          deleteOptionalGoal(goal.id);
+                    "🏃",
 
-                        }}
+                    "📱",
 
-                        disabled={isDaySubmitted}
+                    "📝",
 
-                      >
+                  ].map(
 
-                        ×
+                    (icon) => (
 
-                      </button>
+                      <button
 
-                    </div>
+                        key={icon}
 
+                        className={
 
+                          newGoalIcon ===
 
-                  </div>
+                          icon
 
+                            ? "selected-icon"
 
+                            : ""
 
-                )
+                        }
 
-              )}
+                        onClick={() =>
 
+                          setNewGoalIcon(
 
+                            icon
 
-            </section>
+                          )
 
+                        }
 
+                      >
 
-          )}
+                        {icon}
 
+                      </button>
 
+                    )
 
-          {/* ==================================
+                  )}
 
-              ADD GOAL POPUP
+                </div>
 
-          ================================== */}
+                <div className="add-goal-actions">
 
+                  <button
 
+                    onClick={() => {
 
-          {showAddGoal && (
+                      setShowAddGoal(
 
+                        false
 
+                      );
 
-            <div className="add-goal-overlay">
+                      setNewGoalName(
 
+                        ""
 
+                      );
 
-              <div className="add-goal-modal">
+                    }}
 
+                  >
 
+                    Cancel
 
-                <h2>
+                  </button>
 
-                  ➕ Add Your Goal
+                  <button
 
-                </h2>
+                    onClick={
 
+                      handleAddGoal
 
+                    }
 
-                <p>
+                  >
 
-                  Create a personal
+                    Add Goal
 
-                  goal for your ARC.
+                  </button>
 
-                </p>
+                </div>
 
+              </div>
 
+            </div>
 
-                <input
+          )}
 
-                  type="text"
+          {/* ==================================
 
-                  placeholder="Goal name"
+              FOOTER
 
-                  value={
+          ================================== */}
 
-                    newGoalName
+          <footer>
 
-                  }
+            <p>
 
-                  onChange={(e) =>
+              NO EXCUSES • 90 DAYS •
 
-                    setNewGoalName(
+              PURE DISCIPLINE
 
-                      e.target.value
+            </p>
 
-                    )
+          </footer>
 
-                  }
+        </div>
 
-                />
+      )}
 
+    </>
 
-
-                <div className="icon-options">
-
-
-
-                  {[
-
-                    "🎯",
-
-                    "💧",
-
-                    "📚",
-
-                    "😴",
-
-                    "🧘",
-
-                    "🏃",
-
-                    "📱",
-
-                    "📝",
-
-                  ].map(
-
-                    (icon) => (
-
-
-
-                      <button
-
-                        key={icon}
-
-                        className={
-
-                          newGoalIcon ===
-
-                          icon
-
-                            ? "selected-icon"
-
-                            : ""
-
-                        }
-
-                        onClick={() =>
-
-                          setNewGoalIcon(
-
-                            icon
-
-                          )
-
-                        }
-
-                      >
-
-                        {icon}
-
-                      </button>
-
-
-
-                    )
-
-                  )}
-
-
-
-                </div>
-
-
-
-                <div className="add-goal-actions">
-
-
-
-                  <button
-
-                    onClick={() => {
-
-                      setShowAddGoal(
-
-                        false
-
-                      );
-
-                      setNewGoalName(
-
-                        ""
-
-                      );
-
-                    }}
-
-                  >
-
-                    Cancel
-
-                  </button>
-
-
-
-                  <button
-
-                    onClick={
-
-                      handleAddGoal
-
-                    }
-
-                  >
-
-                    Add Goal
-
-                  </button>
-
-
-
-                </div>
-
-
-
-              </div>
-
-
-
-            </div>
-
-
-
-          )}
-
-
-
-          {/* ==================================
-
-              FOOTER
-
-          ================================== */}
-
-
-
-          <footer>
-
-
-
-            <p>
-
-              NO EXCUSES • 90 DAYS •
-
-              PURE DISCIPLINE
-
-            </p>
-
-
-
-          </footer>
-
-
-
-        </div>
-
-      )}
-
-    </>
-
-  );
+  );
 
 }
-
-
 
 export default App;
